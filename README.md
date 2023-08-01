@@ -1,2 +1,4 @@
 # dblock
-distributed lock based on rdbms, redis, and etc.
+
+distributed lock based on rdbms, redis, etc.
+
