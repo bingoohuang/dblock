@@ -78,6 +78,68 @@ func main() {
 }
 ```
 
+## cli
+
+install `go install github.com/bingoohuang/dblock/...@latest`
+
+db 锁
+
+```sh
+# 第一次以 key = abc 加锁，成功（默认有效期1小时）
+$ dblock -uri mysql://root:root@localhost:3306/mysql -key abc
+2023/08/02 23:15:05 obtained, token: ssddGH1_k1__PFD71dawTw, meta: 
+2023/08/02 23:15:05 ttl 59m59.994631s
+
+# 再次以 key = abc 加锁，失败 
+$ dblock -uri mysql://root:root@localhost:3306/mysql -key abc
+2023/08/02 23:15:07 obtained failed: dblock: not obtained
+
+# 以 key = abc 以及 对应的 token 加锁，成功
+$ dblock -uri mysql://root:root@localhost:3306/mysql -key abc -token ssddGH1_k1__PFD71dawTw
+2023/08/02 23:15:22 obtained, token: ssddGH1_k1__PFD71dawTw, meta: 
+2023/08/02 23:15:22 ttl 59m59.994631s
+
+# 释放 key = abc 锁
+$ dblock -uri mysql://root:root@localhost:3306/mysql -key abc -token ssddGH1_k1__PFD71dawTw -release
+2023/08/02 23:15:26 obtained, token: ssddGH1_k1__PFD71dawTw, meta: 
+2023/08/02 23:15:26 ttl 59m59.99436s
+2023/08/02 23:15:26 release successfully
+
+# 释放后再次获取 key = abc 锁，成功
+$ dblock -uri mysql://root:root@localhost:3306/mysql -key abc                                       
+2023/08/02 23:15:30 obtained, token: eF87Wg8N_FVLJvkV7RfEPw, meta: 
+2023/08/02 23:15:30 ttl 59m59.994559s
+```
+
+redis 锁
+
+```sh
+# 首次加锁 ( key = abc ) 成功
+$ dblock -uri redis://localhost:6379 -key abc
+2023/08/02 23:20:13 obtained, token: dGjS1xUq1RCAbsGPBbP66w, meta: 
+2023/08/02 23:20:13 ttl 59m59.998s
+
+# 再次加锁 ( key = abc ) 失败
+$ dblock -uri redis://localhost:6379 -key abc
+2023/08/02 23:20:14 obtained failed: dblock: not obtained
+
+# 以指定相同的 token 加锁，成功
+$ dblock -uri redis://localhost:6379 -key abc -token dGjS1xUq1RCAbsGPBbP66w
+2023/08/02 23:20:26 obtained, token: dGjS1xUq1RCAbsGPBbP66w, meta: 
+2023/08/02 23:20:26 ttl 59m59.998s
+
+# 释放锁
+$ dblock -uri redis://localhost:6379 -key abc -token dGjS1xUq1RCAbsGPBbP66w -release
+2023/08/02 23:20:31 obtained, token: dGjS1xUq1RCAbsGPBbP66w, meta: 
+2023/08/02 23:20:31 ttl 59m59.999s
+2023/08/02 23:20:31 release successfully
+
+# 释放锁后，再次加锁，成功
+$ dblock -uri redis://localhost:6379 -key abc                                       
+2023/08/02 23:20:41 obtained, token: mX6u3WSLkObsZWYouk6PcA, meta: 
+2023/08/02 23:20:41 ttl 59m59.999s
+```
+
 ## resources
 
 - [PostgreSQL Lock Client for Go](https://github.com/cirello-io/pglock)

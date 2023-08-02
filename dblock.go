@@ -1,3 +1,4 @@
+// Package dblock provides a distributed lock abstraction.
 package dblock
 
 import (
@@ -17,6 +18,7 @@ var (
 	ErrNoProviders = errors.New("dblock: no providers registered")
 )
 
+// Client abstracts the distributed lock.
 type Client interface {
 	// Obtain tries to obtain a new lock using a key with the given TTL.
 	// May return ErrNotObtained if not successful.

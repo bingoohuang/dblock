@@ -75,8 +75,10 @@ func (c *Client) Obtain(ctx context.Context, key string, ttl time.Duration, opti
 	if !c.NotAutoCreateTable && !c.autoCreateTableChecked {
 		if _, err := c.client.ExecContext(ctx, `CREATE TABLE `+c.Table+`(lock_name VARCHAR(64) NOT NULL PRIMARY KEY, `+
 			`lock_until VARCHAR(64) NOT NULL, locked_at VARCHAR(64) NOT NULL, locked_by VARCHAR(1024) NOT NULL, `+
-			`token_value VARCHAR(64) NOT NULL, meta_value VARCHAR(1024), locked_pid VARCHAR(64) NOT NULL)`); err != nil {
-			log.Printf("auto creaet table failed: %v", err)
+			`token_value VARCHAR(64) NOT NULL, meta_value VARCHAR(1024)NOT NULL, locked_pid VARCHAR(64) NOT NULL)`); err != nil {
+			if Debug {
+				log.Printf("auto creaet table failed: %v", err)
+			}
 		}
 		c.autoCreateTableChecked = true
 	}
@@ -167,6 +169,14 @@ func (l *Lock) TTL(ctx context.Context) (time.Duration, error) {
 		return 0, nil
 	}
 
+	if sh.Meta == NonValue {
+		sh.Meta = ""
+	}
+
+	if Debug {
+		log.Printf("found: %+v", sh)
+	}
+
 	lockUntil, err := time.Parse(time.RFC3339Nano, sh.Until)
 	if err != nil {
 		return 0, fmt.Errorf("parse lockUnitl %s: %w", sh.Until, err)
@@ -174,7 +184,15 @@ func (l *Lock) TTL(ctx context.Context) (time.Duration, error) {
 
 	l.Until = sh.Until
 
-	if ttl := lockUntil.Sub(time.Now()); ttl > 0 {
+	now := time.Now()
+	if Debug {
+		log.Printf("now: %s", now.Format(time.RFC3339Nano))
+	}
+	ttl := lockUntil.Sub(now)
+	if Debug {
+		log.Printf("ttl: %s", ttl)
+	}
+	if ttl > 0 {
 		return ttl, nil
 	}
 
@@ -249,8 +267,8 @@ func (l *shedLock) query(ctx context.Context, db DB) (bool, error) {
 	s := `select lock_until, locked_at, locked_by, token_value, meta_value, locked_pid from {Table} ` +
 		`WHERE lock_name = {Name} AND token_value = {Token}`
 	s = strings.ReplaceAll(s, "{Table}", l.Table)
-	s = strings.ReplaceAll(s, "{Name}", SingleQuote(l.Name))
-	s = strings.ReplaceAll(s, "{Token}", SingleQuote(l.Token))
+	s = strings.ReplaceAll(s, "{Name}", singleQuote(l.Name))
+	s = strings.ReplaceAll(s, "{Token}", singleQuote(l.Token))
 
 	row := db.QueryRowContext(ctx, s)
 	if err := row.Scan(&l.Until, &l.At, &l.By, &l.Token, &l.Meta, &l.Pid); errors.Is(err, sql.ErrNoRows) {
@@ -266,13 +284,13 @@ func (l *shedLock) insert(ctx context.Context, db DB) bool {
 	s := `INSERT INTO {Table} (lock_name, lock_until, locked_at, locked_by, token_value, meta_value, locked_pid) ` +
 		`VALUES ({Name}, {Until}, {At}, {By}, {Token}, {Meta}, {LockedPid})`
 	s = strings.ReplaceAll(s, "{Table}", l.Table)
-	s = strings.ReplaceAll(s, "{Name}", SingleQuote(l.Name))
-	s = strings.ReplaceAll(s, "{Until}", SingleQuote(l.Until))
-	s = strings.ReplaceAll(s, "{At}", SingleQuote(time.Now().Format(time.RFC3339Nano)))
-	s = strings.ReplaceAll(s, "{By}", SingleQuote(Hostname))
-	s = strings.ReplaceAll(s, "{Token}", SingleQuote(l.Token))
-	s = strings.ReplaceAll(s, "{Meta}", SingleQuote(l.Meta))
-	s = strings.ReplaceAll(s, "{LockedPid}", SingleQuote(Pid))
+	s = strings.ReplaceAll(s, "{Name}", singleQuote(l.Name))
+	s = strings.ReplaceAll(s, "{Until}", singleQuote(l.Until))
+	s = strings.ReplaceAll(s, "{At}", singleQuote(time.Now().Format(time.RFC3339Nano)))
+	s = strings.ReplaceAll(s, "{By}", singleQuote(Hostname))
+	s = strings.ReplaceAll(s, "{Token}", singleQuote(l.Token))
+	s = strings.ReplaceAll(s, "{Meta}", singleQuote(l.Meta))
+	s = strings.ReplaceAll(s, "{LockedPid}", singleQuote(Pid))
 
 	if _, err := db.ExecContext(ctx, s); err == nil {
 		return true
@@ -285,15 +303,17 @@ func (l *shedLock) update(ctx context.Context, db DB) (bool, error) {
 	s := `UPDATE {Table} SET lock_until = {Until}, ` +
 		`locked_at = {At}, locked_by = {By}, ` +
 		`token_value = {Token}, meta_value = {Meta}, locked_pid = {LockedPid} ` +
-		`WHERE lock_name = {Name} AND lock_until <= {Until}`
+		`WHERE lock_name = {Name} AND (token_value = {Token} or lock_until <= {Now} )`
 	s = strings.ReplaceAll(s, "{Table}", l.Table)
-	s = strings.ReplaceAll(s, "{Name}", SingleQuote(l.Name))
-	s = strings.ReplaceAll(s, "{Until}", SingleQuote(l.Until))
-	s = strings.ReplaceAll(s, "{At}", SingleQuote(time.Now().Format(time.RFC3339Nano)))
-	s = strings.ReplaceAll(s, "{By}", SingleQuote(Hostname))
-	s = strings.ReplaceAll(s, "{Token}", SingleQuote(l.Token))
-	s = strings.ReplaceAll(s, "{Meta}", SingleQuote(l.Meta))
-	s = strings.ReplaceAll(s, "{LockedPid}", SingleQuote(Pid))
+	s = strings.ReplaceAll(s, "{Name}", singleQuote(l.Name))
+	s = strings.ReplaceAll(s, "{Until}", singleQuote(l.Until))
+	now := singleQuote(time.Now().Format(time.RFC3339Nano))
+	s = strings.ReplaceAll(s, "{Now}", now)
+	s = strings.ReplaceAll(s, "{At}", now)
+	s = strings.ReplaceAll(s, "{By}", singleQuote(Hostname))
+	s = strings.ReplaceAll(s, "{Token}", singleQuote(l.Token))
+	s = strings.ReplaceAll(s, "{Meta}", singleQuote(l.Meta))
+	s = strings.ReplaceAll(s, "{LockedPid}", singleQuote(Pid))
 
 	result, err := db.ExecContext(ctx, s)
 	if err != nil {
@@ -312,9 +332,9 @@ func (l *shedLock) extend(ctx context.Context, db DB) (bool, error) {
 	s := `UPDATE {Table} SET lock_until = {Until} ` +
 		`WHERE lock_name = {Name} AND token_value = {Token}`
 	s = strings.ReplaceAll(s, "{Table}", l.Table)
-	s = strings.ReplaceAll(s, "{Name}", SingleQuote(l.Name))
-	s = strings.ReplaceAll(s, "{Until}", SingleQuote(l.Until))
-	s = strings.ReplaceAll(s, "{Token}", SingleQuote(l.Token))
+	s = strings.ReplaceAll(s, "{Name}", singleQuote(l.Name))
+	s = strings.ReplaceAll(s, "{Until}", singleQuote(l.Until))
+	s = strings.ReplaceAll(s, "{Token}", singleQuote(l.Token))
 	result, err := db.ExecContext(ctx, s)
 	if err != nil {
 		return false, fmt.Errorf("update lock %q : %w", s, err)
@@ -332,9 +352,9 @@ func (l *shedLock) unlock(ctx context.Context, db DB) (bool, error) {
 	s := `UPDATE {Table} SET lock_until = {Until} ` +
 		`WHERE lock_name = {Name} AND token_value = {Token}`
 	s = strings.ReplaceAll(s, "{Table}", l.Table)
-	s = strings.ReplaceAll(s, "{Name}", SingleQuote(l.Name))
-	s = strings.ReplaceAll(s, "{Until}", SingleQuote(l.Until))
-	s = strings.ReplaceAll(s, "{Token}", SingleQuote(l.Token))
+	s = strings.ReplaceAll(s, "{Name}", singleQuote(l.Name))
+	s = strings.ReplaceAll(s, "{Until}", singleQuote(l.Until))
+	s = strings.ReplaceAll(s, "{Token}", singleQuote(l.Token))
 	result, err := db.ExecContext(ctx, s)
 	if err != nil {
 		return false, fmt.Errorf("update lock %q : %w", s, err)
@@ -352,8 +372,13 @@ const (
 	escape = '\\'
 )
 
-// SingleQuote returns a single-quoted Go string literal representing s. But, nothing else escapes.
-func SingleQuote(s string) string {
+const NonValue = "(nil)"
+
+// singleQuote returns a single-quoted Go string literal representing s. But, nothing else escapes.
+func singleQuote(s string) string {
+	if s == "" {
+		s = NonValue
+	}
 	out := []rune{quote}
 	for _, r := range s {
 		switch r {

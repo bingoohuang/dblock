@@ -5,6 +5,7 @@ go 1.20
 require (
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/redis/go-redis/v9 v9.0.5
+	github.com/xo/dburl v0.14.2
 )
 
 require (

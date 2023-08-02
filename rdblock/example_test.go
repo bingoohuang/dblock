@@ -33,6 +33,7 @@ func openDB() *sql.DB {
 }
 
 func Example() {
+	// rdblock.Debug = true
 	// Connect to mysql.
 	db, err := sql.Open("mysql",
 		"root:root@(127.0.0.1:3306)/mysql?charset=utf8mb4&parseTime=true&loc=Local")
