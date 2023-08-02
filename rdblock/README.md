@@ -4,7 +4,7 @@
 
 ```sql
 -- 建表语句
-CREATE TABLE shedlock
+CREATE TABLE t_shedlock
 (
     lock_name   VARCHAR(64)   NOT NULL PRIMARY KEY,
     lock_until  VARCHAR(64)   NOT NULL,

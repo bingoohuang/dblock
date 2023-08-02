@@ -5,12 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/bingoohuang/dblock"
 	"log"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/bingoohuang/dblock"
 )
 
 type DB interface {
@@ -26,6 +27,7 @@ func (d *logDb) QueryRowContext(ctx context.Context, query string, args ...any) 
 	log.Printf("query: %q", query)
 	return d.db.QueryRowContext(ctx, query, args...)
 }
+
 func (d *logDb) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	log.Printf("query: %q", query)
 	result, err := d.db.ExecContext(ctx, query, args...)
@@ -38,15 +40,24 @@ func (d *logDb) ExecContext(ctx context.Context, query string, args ...any) (sql
 	return result, err
 }
 
+var Debug bool
+
 // Client wraps a redis client.
 type Client struct {
-	client DB
-	Table  string
+	client             DB
+	Table              string
+	NotAutoCreateTable bool
+
+	autoCreateTableChecked bool
 }
 
 // New creates a new Client instance with a custom namespace.
 func New(client DB) *Client {
-	return &Client{client: &logDb{db: client}}
+	c := &Client{client: client}
+	if Debug {
+		c.client = &logDb{db: client}
+	}
+	return c
 }
 
 // Obtain tries to obtain a new lock using a key with the given TTL.
@@ -58,7 +69,16 @@ func (c *Client) Obtain(ctx context.Context, key string, ttl time.Duration, opti
 	}
 
 	if c.Table == "" {
-		c.Table = "shedlock"
+		c.Table = "t_shedlock"
+	}
+
+	if !c.NotAutoCreateTable && !c.autoCreateTableChecked {
+		if _, err := c.client.ExecContext(ctx, `CREATE TABLE `+c.Table+`(lock_name VARCHAR(64) NOT NULL PRIMARY KEY, `+
+			`lock_until VARCHAR(64) NOT NULL, locked_at VARCHAR(64) NOT NULL, locked_by VARCHAR(1024) NOT NULL, `+
+			`token_value VARCHAR(64) NOT NULL, meta_value VARCHAR(1024), locked_pid VARCHAR(64) NOT NULL)`); err != nil {
+			log.Printf("auto creaet table failed: %v", err)
+		}
+		c.autoCreateTableChecked = true
 	}
 
 	token := opt.Token

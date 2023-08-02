@@ -5,11 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/bingoohuang/dblock/rdblock"
 	"log"
 	"time"
 
 	"github.com/bingoohuang/dblock"
+	"github.com/bingoohuang/dblock/rdblock"
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -20,7 +20,7 @@ func init() {
 func openDB() *sql.DB {
 	// Connect to mysql.
 	db, err := sql.Open("mysql",
-		"root:root@(127.0.0.1:3306)/mdb?charset=utf8mb4&parseTime=true&loc=Local")
+		"root:root@(127.0.0.1:3306)/mysql?charset=utf8mb4&parseTime=true&loc=Local")
 	if err != nil {
 		log.Panic(err)
 	}
@@ -35,7 +35,7 @@ func openDB() *sql.DB {
 func Example() {
 	// Connect to mysql.
 	db, err := sql.Open("mysql",
-		"root:root@(127.0.0.1:3306)/mdb?charset=utf8mb4&parseTime=true&loc=Local")
+		"root:root@(127.0.0.1:3306)/mysql?charset=utf8mb4&parseTime=true&loc=Local")
 	if err != nil {
 		log.Panic(err)
 	}
