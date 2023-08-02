@@ -6,7 +6,8 @@ import (
 	"io"
 )
 
-func RandomToken(tmp []byte) (string, error) {
+func RandomToken() (string, error) {
+	tmp := make([]byte, 16)
 	if _, err := io.ReadFull(rand.Reader, tmp); err != nil {
 		return "", err
 	}

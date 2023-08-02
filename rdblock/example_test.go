@@ -1,27 +1,48 @@
-package redislock_test
+package rdblock_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/bingoohuang/dblock/rdblock"
 	"log"
 	"time"
 
 	"github.com/bingoohuang/dblock"
-	"github.com/bingoohuang/dblock/redislock"
-	"github.com/redis/go-redis/v9"
+	_ "github.com/go-sql-driver/mysql"
 )
 
+func init() {
+	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds)
+}
+
+func openDB() *sql.DB {
+	// Connect to mysql.
+	db, err := sql.Open("mysql",
+		"root:root@(127.0.0.1:3306)/mdb?charset=utf8mb4&parseTime=true&loc=Local")
+	if err != nil {
+		log.Panic(err)
+	}
+
+	// See "Important settings" section.
+	db.SetConnMaxLifetime(time.Minute * 3)
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(10)
+	return db
+}
+
 func Example() {
-	// Connect to redis.
-	client := redis.NewClient(&redis.Options{
-		Network: "tcp",
-		Addr:    "127.0.0.1:6379",
-	})
-	defer client.Close()
+	// Connect to mysql.
+	db, err := sql.Open("mysql",
+		"root:root@(127.0.0.1:3306)/mdb?charset=utf8mb4&parseTime=true&loc=Local")
+	if err != nil {
+		log.Panic(err)
+	}
+	defer db.Close()
 
 	// Create a new lock client.
-	locker := redislock.New(client)
+	locker := rdblock.New(db)
 
 	ctx := context.Background()
 
@@ -65,10 +86,11 @@ func Example() {
 }
 
 func ExampleClient_Obtain_retry() {
-	client := redis.NewClient(&redis.Options{Network: "tcp", Addr: "127.0.0.1:6379"})
-	defer client.Close()
+	db := openDB()
+	defer db.Close()
 
-	locker := redislock.New(client)
+	// Create a new lock client.
+	locker := rdblock.New(db)
 
 	ctx := context.Background()
 
@@ -85,18 +107,21 @@ func ExampleClient_Obtain_retry() {
 	defer lock.Release(ctx)
 
 	fmt.Println("I have a lock!")
+
 	// Output: I have a lock!
 }
 
 func ExampleClient_Obtain_customDeadline() {
-	client := redis.NewClient(&redis.Options{Network: "tcp", Addr: "127.0.0.1:6379"})
-	defer client.Close()
+	db := openDB()
+	defer db.Close()
 
-	locker := redislock.New(client)
+	// Create a new lock client.
+	locker := rdblock.New(db)
 
 	// Retry every 500ms, for up-to a minute
 	backoff := dblock.LinearBackoff(500 * time.Millisecond)
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(time.Minute))
+	ctx := context.Background()
+	ctx, cancel := context.WithDeadline(ctx, time.Now().Add(time.Minute))
 	defer cancel()
 
 	// Obtain lock with retry + custom deadline
@@ -106,7 +131,7 @@ func ExampleClient_Obtain_customDeadline() {
 	} else if err != nil {
 		log.Panicln(err)
 	}
-	defer lock.Release(context.Background())
+	defer lock.Release(ctx)
 
 	fmt.Println("I have a lock!")
 	// Output: I have a lock!

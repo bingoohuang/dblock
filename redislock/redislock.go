@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/bingoohuang/dblock"
@@ -25,8 +24,8 @@ if redis.call("getrange", KEYS[1], 0, offset-1) == string.sub(ARGV[1], 1, offset
 )
 
 // Obtain is a short-cut for New(...).Obtain(...).
-func Obtain(ctx context.Context, client RedisClient, key string, ttl time.Duration, opt *dblock.Options) (dblock.Lock, error) {
-	return New(client).Obtain(ctx, key, ttl, opt)
+func Obtain(ctx context.Context, client RedisClient, key string, ttl time.Duration, optionsFns ...dblock.OptionsFn) (dblock.Lock, error) {
+	return New(client).Obtain(ctx, key, ttl, optionsFns...)
 }
 
 // RedisClient is a minimal client interface.
@@ -37,8 +36,6 @@ type RedisClient interface {
 // Client wraps a redis client.
 type Client struct {
 	client RedisClient
-	tmp    []byte
-	tmpMu  sync.Mutex
 }
 
 // New creates a new Client instance with a custom namespace.
@@ -48,9 +45,10 @@ func New(client RedisClient) *Client {
 
 // Obtain tries to obtain a new lock using a key with the given TTL.
 // May return ErrNotObtained if not successful.
-func (c *Client) Obtain(ctx context.Context, key string, ttl time.Duration, opt *dblock.Options) (dblock.Lock, error) {
-	if opt == nil {
-		opt = &dblock.Options{}
+func (c *Client) Obtain(ctx context.Context, key string, ttl time.Duration, optionsFns ...dblock.OptionsFn) (dblock.Lock, error) {
+	opt := &dblock.Options{}
+	for _, f := range optionsFns {
+		f(opt)
 	}
 
 	token := opt.Token
@@ -58,7 +56,7 @@ func (c *Client) Obtain(ctx context.Context, key string, ttl time.Duration, opt 
 	// Create a random token
 	if token == "" {
 		var err error
-		if token, err = c.randomToken(); err != nil {
+		if token, err = dblock.RandomToken(); err != nil {
 			return nil, err
 		}
 	}
@@ -165,17 +163,6 @@ func (l *Lock) Release(ctx context.Context) error {
 		return dblock.ErrLockNotHeld
 	}
 	return nil
-}
-
-func (c *Client) randomToken() (string, error) {
-	c.tmpMu.Lock()
-	defer c.tmpMu.Unlock()
-
-	if len(c.tmp) == 0 {
-		c.tmp = make([]byte, 16)
-	}
-
-	return dblock.RandomToken(c.tmp)
 }
 
 func (c *Client) obtain(ctx context.Context, key, value string, tokenLen int, ttlVal string) (bool, error) {

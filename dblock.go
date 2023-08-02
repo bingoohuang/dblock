@@ -12,12 +12,15 @@ var (
 
 	// ErrLockNotHeld is returned when trying to release an inactive lock.
 	ErrLockNotHeld = errors.New("dblock: lock not held")
+
+	// ErrNoProviders is returned when trying to obtain a lock.
+	ErrNoProviders = errors.New("dblock: no providers registered")
 )
 
 type Client interface {
 	// Obtain tries to obtain a new lock using a key with the given TTL.
 	// May return ErrNotObtained if not successful.
-	Obtain(ctx context.Context, key string, ttl time.Duration, opt *Options) (Lock, error)
+	Obtain(ctx context.Context, key string, ttl time.Duration, optionsFns ...OptionsFn) (Lock, error)
 }
 
 // Lock represents an obtained, distributed lock.
@@ -38,7 +41,7 @@ type Lock interface {
 	Release(ctx context.Context) error
 }
 
-// Options describe the options for the lock
+// Options describe the options for the lock.
 type Options struct {
 	// RetryStrategy allows to customise the lock retry strategy.
 	// Default: do not retry
@@ -52,6 +55,31 @@ type Options struct {
 	Token string
 }
 
+// OptionsFn allows to customise the lock retry strategy.
+type OptionsFn func(*Options)
+
+// WithRetryStrategy set the lock retry strategy.
+func WithRetryStrategy(strategy RetryStrategy) OptionsFn {
+	return func(options *Options) {
+		options.RetryStrategy = strategy
+	}
+}
+
+// WithMeta set the metadata.
+func WithMeta(meta string) OptionsFn {
+	return func(options *Options) {
+		options.Meta = meta
+	}
+}
+
+// WithToken set the token.
+func WithToken(token string) OptionsFn {
+	return func(options *Options) {
+		options.Token = token
+	}
+}
+
+// GetRetryStrategy returns the retry strategy.
 func (o *Options) GetRetryStrategy() RetryStrategy {
 	if o.RetryStrategy != nil {
 		return o.RetryStrategy
