@@ -30,6 +30,7 @@ type ClientView interface {
 	View(ctx context.Context, key string) (LockView, error)
 }
 
+// LockView is the view of a lock for viewing.
 type LockView interface {
 	// GetToken returns the token value set by the lock.
 	GetToken() string

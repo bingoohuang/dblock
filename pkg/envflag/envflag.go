@@ -4,7 +4,6 @@ import (
 	"flag"
 	"log"
 	"os"
-	"reflect"
 	"regexp"
 	"strings"
 )
@@ -25,13 +24,15 @@ func Parse() error {
 	return ParseFlagSet(flag.CommandLine, os.Args[1:])
 }
 
-var boolPtrType = reflect.TypeOf((*bool)(nil))
+type boolFlag interface {
+	IsBoolFlag() bool
+}
 
 func ParseFlagSet(flagSet *flag.FlagSet, arguments []string) error {
 	flagSet.VisitAll(func(f *flag.Flag) {
 		envName := ToSnakeCase(f.Name)
 		if env := os.Getenv(envName); env != "" {
-			if isBoolFlag := reflect.ValueOf(f.Value).CanConvert(boolPtrType); !isBoolFlag {
+			if b, ok := f.Value.(boolFlag); ok && b.IsBoolFlag() {
 				f.Value = &envValue{Value: f.Value, envName: envName, envValue: env}
 			}
 		}
@@ -52,13 +53,14 @@ func ParseFlagSet(flagSet *flag.FlagSet, arguments []string) error {
 	return nil
 }
 
-var (
-	matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
-	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
-)
-
+// ToSnakeCase converts camelCase to snaked CAMEL_CASE.
 func ToSnakeCase(str string) string {
 	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
 	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
 	return strings.ToUpper(snake)
 }
+
+var (
+	matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
+	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
+)

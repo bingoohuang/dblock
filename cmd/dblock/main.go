@@ -118,6 +118,10 @@ mysql://root:root@localhost:3306/mysql
 				log.Printf("view: %s", lockView)
 			}
 		}
+	default:
+		if _, err := getLock(err, locker, ctx, pKey, pTTL, pToken, pMeta); err != nil {
+			return
+		}
 	}
 }
 
