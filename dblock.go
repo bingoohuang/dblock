@@ -4,6 +4,7 @@ package dblock
 import (
 	"context"
 	"errors"
+	"io"
 	"time"
 )
 
@@ -20,14 +21,17 @@ var (
 
 // Client abstracts the distributed lock.
 type Client interface {
+	View(ctx context.Context, key string) (LockView, error)
+
 	// Obtain tries to obtain a new lock using a key with the given TTL.
 	// May return ErrNotObtained if not successful.
 	Obtain(ctx context.Context, key string, ttl time.Duration, optionsFns ...OptionsFn) (Lock, error)
 }
 
-// ClientView abstracts the distributed lock viewing.
-type ClientView interface {
-	View(ctx context.Context, key string) (LockView, error)
+// ClientCloser abstracts the distributed lock that can be closed.
+type ClientCloser interface {
+	Client
+	io.Closer
 }
 
 // LockView is the view of a lock for viewing.
