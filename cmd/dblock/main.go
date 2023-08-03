@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bingoohuang/dblock"
+	"github.com/bingoohuang/dblock/pkg/envflag"
 	"github.com/bingoohuang/dblock/rdblock"
 	"github.com/bingoohuang/dblock/redislock"
 	_ "github.com/go-sql-driver/mysql"
@@ -25,6 +26,7 @@ func main() {
 	pKey := flag.String("key", "testkey", "lock key （required）")
 	pRelease := flag.Bool("release", false, "release lock")
 	pRefresh := flag.Bool("refresh", false, "refresh lock")
+	pView := flag.Bool("view", false, "view lock")
 	// redis url 格式 https://cloud.tencent.com/developer/article/1451666
 	// redis://[:password@]host[:port][/database][?[timeout=timeout[d|h|m|s|ms|us|ns]][&database=database]]
 	// postgres://user:pass@localhost/dbname
@@ -44,7 +46,7 @@ func main() {
 redis://localhost:6379
 mysql://root:root@localhost:3306/mysql
 `)
-	flag.Parse()
+	_ = envflag.Parse()
 
 	if *pKey == "" || *pURI == "" {
 		flag.Usage()
@@ -87,33 +89,52 @@ mysql://root:root@localhost:3306/mysql
 
 	ctx := context.Background()
 
-	lock, err := locker.Obtain(ctx, *pKey, *pTTL, dblock.WithToken(*pToken), dblock.WithMeta(*pMeta))
-	if err != nil {
-		log.Printf("obtained failed: %v", err)
-		return
-	}
-	log.Printf("obtained, token: %s, meta: %s", lock.Token(), lock.Metadata())
-	ttl, err := lock.TTL(ctx)
-	if err != nil {
-		log.Printf("obtained failed: %v", err)
-		return
-	}
-	log.Printf("ttl %s", ttl)
-
 	switch {
 	case *pRelease:
+		lock, err := getLock(err, locker, ctx, pKey, pTTL, pToken, pMeta)
+		if err != nil {
+			return
+		}
 		if err := lock.Release(ctx); err != nil {
 			log.Printf("release failed: %v", err)
 		} else {
 			log.Printf("release successfully")
 		}
 	case *pRefresh:
+		lock, err := getLock(err, locker, ctx, pKey, pTTL, pToken, pMeta)
+		if err != nil {
+			return
+		}
 		if err := lock.Refresh(ctx, *pTTL); err != nil {
 			log.Printf("refresh failed: %v", err)
 		} else {
 			log.Printf("refresh successfully")
 		}
+	case *pView:
+		if view, ok := locker.(dblock.ClientView); ok {
+			if lockView, err := view.View(ctx, *pKey); err != nil {
+				log.Printf("view failed: %v", err)
+			} else {
+				log.Printf("view: %s", lockView)
+			}
+		}
 	}
+}
+
+func getLock(err error, locker dblock.Client, ctx context.Context, pKey *string, pTTL *time.Duration, pToken *string, pMeta *string) (dblock.Lock, error) {
+	lock, err := locker.Obtain(ctx, *pKey, *pTTL, dblock.WithToken(*pToken), dblock.WithMeta(*pMeta))
+	if err != nil {
+		log.Printf("obtained failed: %v", err)
+		return nil, err
+	}
+	log.Printf("obtained, token: %s, meta: %s", lock.Token(), lock.Metadata())
+	ttl, err := lock.TTL(ctx)
+	if err != nil {
+		log.Printf("obtained failed: %v", err)
+		return nil, err
+	}
+	log.Printf("ttl %s", ttl)
+	return lock, nil
 }
 
 func ParseInt(s string) int {

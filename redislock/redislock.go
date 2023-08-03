@@ -24,23 +24,47 @@ if redis.call("getrange", KEYS[1], 0, offset-1) == string.sub(ARGV[1], 1, offset
 )
 
 // Obtain is a short-cut for New(...).Obtain(...).
-func Obtain(ctx context.Context, client RedisClient, key string, ttl time.Duration, optionsFns ...dblock.OptionsFn) (dblock.Lock, error) {
+func Obtain(ctx context.Context, client *redis.Client, key string, ttl time.Duration, optionsFns ...dblock.OptionsFn) (dblock.Lock, error) {
 	return New(client).Obtain(ctx, key, ttl, optionsFns...)
-}
-
-// RedisClient is a minimal client interface.
-type RedisClient interface {
-	redis.Scripter
 }
 
 // Client wraps a redis client.
 type Client struct {
-	client RedisClient
+	client *redis.Client
 }
 
 // New creates a new Client instance with a custom namespace.
-func New(client RedisClient) *Client {
+func New(client *redis.Client) *Client {
 	return &Client{client: client}
+}
+
+type lockView struct {
+	TokenMeta string
+	time.Duration
+}
+
+func (l lockView) GetToken() string    { return l.TokenMeta }
+func (l lockView) GetMetadata() string { return l.GetMetadata() }
+func (l lockView) GetUntil() string    { return l.Duration.String() }
+func (l lockView) String() string {
+	return "{TokenMeta: " + l.TokenMeta + " Duration: " + l.Duration.String() + "}"
+}
+
+func (c *Client) View(ctx context.Context, key string) (dblock.LockView, error) {
+	result, err := c.client.Get(ctx, key).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return &lockView{}, nil
+		}
+		return nil, err
+	}
+
+	duration, err := c.client.TTL(ctx, key).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	return &lockView{TokenMeta: result, Duration: duration}, nil
 }
 
 // Obtain tries to obtain a new lock using a key with the given TTL.

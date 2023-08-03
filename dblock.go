@@ -25,6 +25,22 @@ type Client interface {
 	Obtain(ctx context.Context, key string, ttl time.Duration, optionsFns ...OptionsFn) (Lock, error)
 }
 
+// ClientView abstracts the distributed lock viewing.
+type ClientView interface {
+	View(ctx context.Context, key string) (LockView, error)
+}
+
+type LockView interface {
+	// GetToken returns the token value set by the lock.
+	GetToken() string
+
+	// GetMetadata returns the metadata of the lock.
+	GetMetadata() string
+
+	// GetUntil returns expired time in RFC3339.
+	GetUntil() string
+}
+
 // Lock represents an obtained, distributed lock.
 type Lock interface {
 	// Token returns the token value set by the lock.

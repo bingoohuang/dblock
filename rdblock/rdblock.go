@@ -60,6 +60,18 @@ func New(client DB) *Client {
 	return c
 }
 
+func (c *Client) getTable() string {
+	if c.Table == "" {
+		return "t_shedlock"
+	}
+
+	return c.Table
+}
+
+func (c *Client) View(ctx context.Context, key string) (dblock.LockView, error) {
+	return view(ctx, c.client, c.getTable(), key)
+}
+
 // Obtain tries to obtain a new lock using a key with the given TTL.
 // May return ErrNotObtained if not successful.
 func (c *Client) Obtain(ctx context.Context, key string, ttl time.Duration, optionsFns ...dblock.OptionsFn) (dblock.Lock, error) {
@@ -68,9 +80,7 @@ func (c *Client) Obtain(ctx context.Context, key string, ttl time.Duration, opti
 		f(opt)
 	}
 
-	if c.Table == "" {
-		c.Table = "t_shedlock"
-	}
+	c.Table = c.getTable()
 
 	if !c.NotAutoCreateTable && !c.autoCreateTableChecked {
 		if _, err := c.client.ExecContext(ctx, `CREATE TABLE `+c.Table+`(lock_name VARCHAR(64) NOT NULL PRIMARY KEY, `+
@@ -261,6 +271,30 @@ type shedLock struct {
 	Token string
 	Meta  string
 	Pid   string
+}
+
+func (l *shedLock) GetToken() string    { return l.Token }
+func (l *shedLock) GetMetadata() string { return l.Meta }
+func (l *shedLock) GetUntil() string    { return l.Until }
+func (l *shedLock) String() string {
+	return "{Token: " + l.Token + " Until: " + l.Until + " At: " + l.At + " Meta: " + l.Meta + " By: " + l.By + " PID: " + l.Pid + "}"
+}
+
+func view(ctx context.Context, db DB, table, lockName string) (*shedLock, error) {
+	var l shedLock
+	s := `select lock_until, locked_at, locked_by, token_value, meta_value, locked_pid from {Table} ` +
+		`WHERE lock_name = {Name}`
+	s = strings.ReplaceAll(s, "{Table}", table)
+	s = strings.ReplaceAll(s, "{Name}", singleQuote(lockName))
+
+	row := db.QueryRowContext(ctx, s)
+	if err := row.Scan(&l.Until, &l.At, &l.By, &l.Token, &l.Meta, &l.Pid); errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+
+	return &l, nil
 }
 
 func (l *shedLock) query(ctx context.Context, db DB) (bool, error) {
