@@ -13,6 +13,11 @@ type envValue struct {
 	envName  string
 	envValue string
 	set      bool
+	boolFlag bool
+}
+
+func (v *envValue) IsBoolFlag() bool {
+	return v.boolFlag
 }
 
 func (v *envValue) Set(value string) error {
@@ -24,7 +29,10 @@ func Parse() error {
 	return ParseFlagSet(flag.CommandLine, os.Args[1:])
 }
 
+// optional interface to indicate boolean flags that can be
+// supplied without "=value" text
 type boolFlag interface {
+	flag.Value
 	IsBoolFlag() bool
 }
 
@@ -32,8 +40,12 @@ func ParseFlagSet(flagSet *flag.FlagSet, arguments []string) error {
 	flagSet.VisitAll(func(f *flag.Flag) {
 		envName := ToSnakeCase(f.Name)
 		if env := os.Getenv(envName); env != "" {
-			if b, ok := f.Value.(boolFlag); ok && b.IsBoolFlag() {
-				f.Value = &envValue{Value: f.Value, envName: envName, envValue: env}
+			b, ok := f.Value.(boolFlag)
+			f.Value = &envValue{
+				Value:    f.Value,
+				envName:  envName,
+				envValue: env,
+				boolFlag: ok && b.IsBoolFlag(),
 			}
 		}
 	})

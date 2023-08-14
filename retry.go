@@ -66,11 +66,12 @@ func (r *exponentialBackoff) NextBackoff() time.Duration {
 		ms = 2 << cnt
 	}
 
-	if d := time.Duration(ms) * time.Millisecond; d < r.min {
+	switch d := time.Duration(ms) * time.Millisecond; {
+	case d < r.min:
 		return r.min
-	} else if r.max != 0 && d > r.max {
+	case r.max != 0 && d > r.max:
 		return r.max
-	} else {
+	default:
 		return d
 	}
 }
